@@ -6,10 +6,10 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Axis, Block, Borders, Chart, Clear, Dataset, Gauge, GraphType, Paragraph, Wrap,
 };
-use ratatui::{symbols, Frame};
+use ratatui::{Frame, symbols};
 
 use crate::app::AppState;
-use crate::constants::{STATE_OFF, STATE_ON, TARGET_FLOW_MAX, TARGET_FLOW_MIN};
+use crate::constants::{STATE_OFF, STATE_ON, TARGET_FLOW_MAX};
 use crate::data::register_name;
 
 pub fn render_ui(frame: &mut Frame, app: &AppState) {
@@ -57,23 +57,13 @@ pub fn render_ui(frame: &mut Frame, app: &AppState) {
     }
 }
 
-fn render_header(frame: &mut Frame, area: Rect, app: &AppState) {
-    let mode_label = if app.simulate { "SIM" } else { "LIVE" };
-    let title = Line::from(vec![
-        Span::styled(
-            "Quick 6101A2 Monitor",
-            Style::default()
-                .fg(Color::LightMagenta)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("  "),
-        Span::styled(
-            mode_label,
-            Style::default()
-                .fg(Color::LightCyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]);
+fn render_header(frame: &mut Frame, area: Rect, _app: &AppState) {
+    let title = Line::from(vec![Span::styled(
+        "Quick 6101A2 Monitor",
+        Style::default()
+            .fg(Color::LightMagenta)
+            .add_modifier(Modifier::BOLD),
+    )]);
 
     let paragraph = Paragraph::new(title).alignment(ratatui::layout::Alignment::Center);
     frame.render_widget(paragraph, area);
@@ -94,6 +84,20 @@ fn render_status(frame: &mut Frame, area: Rect, app: &AppState) {
         _ => ("--", Style::default().fg(Color::Gray)),
     };
 
+    let (connection_text, connection_style) = if app.connected {
+        (
+            "Connected",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        (
+            "Disconnected",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        )
+    };
+
     let target_flow = app.status.as_ref().map_or(0, |status| status.target_flow);
     let real_flow = app.status.as_ref().map_or(0, |status| status.real_flow);
     let mode_label = if app.simulate { "SIM" } else { "LIVE" };
@@ -106,6 +110,9 @@ fn render_status(frame: &mut Frame, area: Rect, app: &AppState) {
     let line = Line::from(vec![
         Span::styled("State: ", Style::default().fg(Color::Gray)),
         Span::styled(state_text, state_style),
+        Span::raw("  "),
+        Span::styled("Link: ", Style::default().fg(Color::Gray)),
+        Span::styled(connection_text, connection_style),
         Span::raw("  "),
         Span::styled("Target Flow: ", Style::default().fg(Color::Gray)),
         Span::raw(format!("{target_flow} m3/h")),
@@ -185,8 +192,11 @@ fn render_flow_chart(frame: &mut Frame, area: Rect, app: &AppState) {
         )
         .y_axis(
             Axis::default()
-                .bounds([f64::from(TARGET_FLOW_MIN), f64::from(TARGET_FLOW_MAX)])
-                .labels(vec![Span::from("0"), Span::from("50")]),
+                .bounds([f64::from(0), f64::from(TARGET_FLOW_MAX)])
+                .labels(vec![
+                    Span::from("0"),
+                    Span::from(format!("{}", TARGET_FLOW_MAX)),
+                ]),
         );
 
     frame.render_widget(chart, area);
@@ -201,12 +211,14 @@ fn render_speed_chart(frame: &mut Frame, area: Rect, app: &AppState) {
         .fold(0.0, f64::max)
         .max(100.0);
 
-    let datasets = vec![Dataset::default()
-        .name("RPM")
-        .marker(symbols::Marker::Braille)
-        .style(Style::default().fg(Color::LightGreen))
-        .graph_type(GraphType::Line)
-        .data(&data)];
+    let datasets = vec![
+        Dataset::default()
+            .name("RPM")
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::LightGreen))
+            .graph_type(GraphType::Line)
+            .data(&data),
+    ];
 
     let chart = Chart::new(datasets)
         .block(

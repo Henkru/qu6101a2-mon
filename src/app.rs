@@ -6,6 +6,7 @@ use crate::data::DeviceStatus;
 #[allow(clippy::struct_excessive_bools)]
 pub struct AppState {
     pub status: Option<DeviceStatus>,
+    pub connected: bool,
     pub flow_history: VecDeque<(f64, f64)>,
     pub speed_history: VecDeque<(f64, f64)>,
     pub target_flow: u16,
@@ -22,6 +23,7 @@ impl AppState {
     pub fn new(simulate: bool, read_only: bool) -> Self {
         Self {
             status: None,
+            connected: false,
             flow_history: VecDeque::with_capacity(120),
             speed_history: VecDeque::with_capacity(120),
             target_flow: 0,
@@ -38,6 +40,7 @@ impl AppState {
     pub fn update_status(&mut self, status: DeviceStatus) {
         self.target_flow = status.target_flow;
         self.status = Some(status);
+        self.connected = true;
         self.push_history();
     }
 

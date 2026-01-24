@@ -122,6 +122,7 @@ fn main() -> eyre::Result<()> {
 
         match event_rx.try_recv() {
             Ok(TransportEvent::Status(status)) => app.update_status(status),
+            Ok(TransportEvent::Connection(connected)) => app.connected = connected,
             Ok(TransportEvent::Error(err)) => {
                 exit_error = Some(err.wrap_err("serial connection failed"));
                 app.should_quit = true;

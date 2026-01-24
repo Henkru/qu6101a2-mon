@@ -17,6 +17,7 @@ pub enum TransportCommand {
 #[derive(Debug)]
 pub enum TransportEvent {
     Status(DeviceStatus),
+    Connection(bool),
     Error(eyre::Report),
 }
 
@@ -64,15 +65,21 @@ fn run_serial_loop(
         match command_rx.recv_timeout(config.poll_interval) {
             Ok(TransportCommand::WriteRegister { register, value }) => {
                 if !config.read_only {
-                    write_register(&mut master, &config, register, value)?;
+                    if write_register(&mut master, &config, register, value).is_err() {
+                        event_tx.send(TransportEvent::Connection(false)).ok();
+                    }
                 }
             }
             Ok(TransportCommand::Terminate) => break,
-            Err(RecvTimeoutError::Timeout) => {
-                if let Some(status) = read_status(&mut master, &config)? {
+            Err(RecvTimeoutError::Timeout) => match read_status(&mut master, &config) {
+                Ok(Some(status)) => {
                     event_tx.send(TransportEvent::Status(status)).ok();
+                    event_tx.send(TransportEvent::Connection(true)).ok();
                 }
-            }
+                Ok(None) | Err(_) => {
+                    event_tx.send(TransportEvent::Connection(false)).ok();
+                }
+            },
             Err(RecvTimeoutError::Disconnected) => {
                 return Err(eyre::eyre!("command channel closed"));
             }
