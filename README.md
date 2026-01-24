@@ -24,3 +24,11 @@ Common flags:
 Debug-only:
 
 - `--simulate`, `-s`: run without a serial device
+
+## Keys
+
+- `Space`: toggle power ON/OFF
+- `←/→`: adjust target airflow
+- `t`: set target airflow
+- `d`: toggle register panel
+- `q`: quit
