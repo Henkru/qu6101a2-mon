@@ -13,8 +13,8 @@ pub const REG_REAL_FLOW: u16 = 0x0014;
 pub const STATE_OFF: u16 = 0;
 pub const STATE_ON: u16 = 1;
 
-pub const TARGET_FLOW_MIN: u16 = 0;
-pub const TARGET_FLOW_MAX: u16 = 50;
+pub const TARGET_FLOW_MIN: u16 = 30;
+pub const TARGET_FLOW_MAX: u16 = 100;
 
 pub const STATUS_POLL_REG_START: u16 = 0x0000;
 pub const STATUS_POLL_REG_COUNT: u16 = 0x0018;
