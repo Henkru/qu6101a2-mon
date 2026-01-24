@@ -4,6 +4,8 @@ Proof of Concept monitor/controller for the Quick 6101A2 fume extractor over Mod
 
 ![Demo](docs/demo.png)
 
+You can find background and technical details from the blog [post](https://nurmi.me/posts/re-quick-6101a2/).
+
 > [!IMPORTANT]
 > Use at your own risk.
 
