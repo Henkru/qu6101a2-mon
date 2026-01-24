@@ -28,6 +28,11 @@
           mkShell {
             buildInputs = [
               rust-bin.stable.latest.default
+              rust-analyzer
+            ]
+            ++ lib.optionals stdenv.isLinux [
+              pkg-config
+              (if pkgs ? udev then udev else systemd)
             ];
           };
       }
