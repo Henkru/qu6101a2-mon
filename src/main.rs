@@ -63,7 +63,6 @@ struct Args {
 struct RuntimeArgs {
     transport: TransportConfig,
     read_only: bool,
-    simulate_ui: bool,
 }
 
 fn main() -> eyre::Result<()> {
@@ -84,7 +83,7 @@ fn main() -> eyre::Result<()> {
     let serial_handle = spawn_worker(runtime.transport.clone(), command_rx, event_tx);
 
     let tick_rate = Duration::from_millis(100);
-    let mut app = AppState::new(runtime.simulate_ui, runtime.read_only);
+    let mut app = AppState::new(runtime.transport.interface, runtime.read_only);
     let mut exit_error: Option<eyre::Report> = None;
 
     loop {
@@ -163,7 +162,6 @@ fn resolve_runtime_args(args: &Args) -> eyre::Result<RuntimeArgs> {
             interface,
         },
         read_only: args.read_only,
-        simulate_ui: interface == InterfaceMode::Simulation,
     })
 }
 

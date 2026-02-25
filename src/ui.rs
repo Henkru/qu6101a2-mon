@@ -6,11 +6,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Axis, Block, Borders, Chart, Clear, Dataset, Gauge, GraphType, Paragraph, Wrap,
 };
-use ratatui::{Frame, symbols};
+use ratatui::{symbols, Frame};
 
 use crate::app::AppState;
 use crate::constants::{STATE_OFF, STATE_ON, TARGET_FLOW_MAX};
 use crate::data::register_name;
+use crate::interface::InterfaceMode;
 
 pub fn render_ui(frame: &mut Frame, app: &AppState) {
     let mut constraints = vec![
@@ -100,11 +101,10 @@ fn render_status(frame: &mut Frame, area: Rect, app: &AppState) {
 
     let target_flow = app.status.as_ref().map_or(0, |status| status.target_flow);
     let real_flow = app.status.as_ref().map_or(0, |status| status.real_flow);
-    let mode_label = if app.simulate { "SIM" } else { "LIVE" };
-    let mode_color = if app.simulate {
-        Color::Yellow
-    } else {
-        Color::Blue
+    let (mode_label, mode_color) = match app.interface {
+        InterfaceMode::Remote => ("REMOTE", Color::Blue),
+        InterfaceMode::Exttool => ("EXTTOOL", Color::Cyan),
+        InterfaceMode::Simulation => ("SIM", Color::Yellow),
     };
 
     let line = Line::from(vec![
@@ -211,14 +211,12 @@ fn render_speed_chart(frame: &mut Frame, area: Rect, app: &AppState) {
         .fold(0.0, f64::max)
         .max(100.0);
 
-    let datasets = vec![
-        Dataset::default()
-            .name("RPM")
-            .marker(symbols::Marker::Braille)
-            .style(Style::default().fg(Color::LightGreen))
-            .graph_type(GraphType::Line)
-            .data(&data),
-    ];
+    let datasets = vec![Dataset::default()
+        .name("RPM")
+        .marker(symbols::Marker::Braille)
+        .style(Style::default().fg(Color::LightGreen))
+        .graph_type(GraphType::Line)
+        .data(&data)];
 
     let chart = Chart::new(datasets)
         .block(

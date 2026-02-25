@@ -114,12 +114,13 @@ mod tests {
     use crate::constants::{STATE_OFF, STATE_ON};
     use crate::data::DeviceStatus;
     use crate::input::handle_key_event;
+    use crate::interface::InterfaceMode;
     use crate::transport::TransportCommand;
 
     #[test]
     fn read_only_mode_does_not_emit_write_commands() {
         let (tx, rx) = mpsc::channel();
-        let mut app = AppState::new(false, true);
+        let mut app = AppState::new(InterfaceMode::Remote, true);
         app.status = Some(sample_status(STATE_OFF));
 
         handle_key_event(KeyCode::Char(' '), &mut app, &tx).expect("space key should work");
@@ -132,7 +133,7 @@ mod tests {
     #[test]
     fn power_toggle_sends_expected_command() {
         let (tx, rx) = mpsc::channel();
-        let mut app = AppState::new(false, false);
+        let mut app = AppState::new(InterfaceMode::Remote, false);
         app.status = Some(sample_status(STATE_ON));
 
         handle_key_event(KeyCode::Char(' '), &mut app, &tx).expect("space key should work");
@@ -146,7 +147,7 @@ mod tests {
     #[test]
     fn typed_target_flow_is_clamped_before_send() {
         let (tx, rx) = mpsc::channel();
-        let mut app = AppState::new(false, false);
+        let mut app = AppState::new(InterfaceMode::Remote, false);
         app.input_mode = true;
         app.input_buffer = String::from("999");
 

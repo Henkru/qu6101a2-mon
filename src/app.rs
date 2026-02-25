@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::data::DeviceStatus;
+use crate::interface::InterfaceMode;
 
 #[derive(Debug)]
 #[allow(clippy::struct_excessive_bools)]
@@ -12,7 +13,7 @@ pub struct AppState {
     pub target_flow: u16,
     pub tick: u32,
     pub should_quit: bool,
-    pub simulate: bool,
+    pub interface: InterfaceMode,
     pub read_only: bool,
     pub show_debug: bool,
     pub input_mode: bool,
@@ -20,7 +21,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(simulate: bool, read_only: bool) -> Self {
+    pub fn new(interface: InterfaceMode, read_only: bool) -> Self {
         Self {
             status: None,
             connected: false,
@@ -29,7 +30,7 @@ impl AppState {
             target_flow: 0,
             tick: 0,
             should_quit: false,
-            simulate,
+            interface,
             read_only,
             show_debug: false,
             input_mode: false,
