@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Axis, Block, Borders, Chart, Clear, Dataset, Gauge, GraphType, Paragraph, Wrap,
 };
-use ratatui::{Frame, symbols};
+use ratatui::{symbols, Frame};
 
 use crate::app::AppState;
 use crate::constants::{STATE_OFF, STATE_ON, TARGET_FLOW_MAX};
@@ -195,7 +195,7 @@ fn render_flow_chart(frame: &mut Frame, area: Rect, app: &AppState) {
                 .bounds([f64::from(0), f64::from(TARGET_FLOW_MAX)])
                 .labels(vec![
                     Span::from("0"),
-                    Span::from(format!("{}", TARGET_FLOW_MAX)),
+                    Span::from(format!("{TARGET_FLOW_MAX}")),
                 ]),
         );
 
@@ -211,14 +211,12 @@ fn render_speed_chart(frame: &mut Frame, area: Rect, app: &AppState) {
         .fold(0.0, f64::max)
         .max(100.0);
 
-    let datasets = vec![
-        Dataset::default()
-            .name("RPM")
-            .marker(symbols::Marker::Braille)
-            .style(Style::default().fg(Color::LightGreen))
-            .graph_type(GraphType::Line)
-            .data(&data),
-    ];
+    let datasets = vec![Dataset::default()
+        .name("RPM")
+        .marker(symbols::Marker::Braille)
+        .style(Style::default().fg(Color::LightGreen))
+        .graph_type(GraphType::Line)
+        .data(&data)];
 
     let chart = Chart::new(datasets)
         .block(

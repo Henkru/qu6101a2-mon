@@ -1,6 +1,8 @@
 mod app;
+mod backend;
 mod constants;
 mod data;
+mod interface;
 mod input;
 mod transport;
 mod ui;
@@ -23,67 +25,50 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
 use app::AppState;
+use interface::InterfaceMode;
 use input::handle_key_event;
 use transport::{spawn_worker, TransportConfig, TransportEvent};
 use ui::render_ui;
 
-#[cfg(debug_assertions)]
-#[derive(Parser, Debug, Clone)]
-#[command(author, version, about = "Quick 6101A2 TUI monitor")]
-struct Args {
-    /// Serial port path (e.g. /dev/ttyUSB0)
-    #[arg(short, long, required_unless_present = "simulate")]
-    port: Option<String>,
-
-    /// Serial baud rate
-    #[arg(short, long, default_value_t = 19_200)]
-    baud: u32,
-
-    /// Modbus device address
-    #[arg(short, long, default_value_t = 2)]
-    address: u8,
-
-    /// Poll interval in milliseconds
-    #[arg(short = 'i', long, default_value_t = 500)]
-    poll_interval: u64,
-
-    /// Run without a serial device
-    #[arg(short = 's', long, default_value_t = false)]
-    simulate: bool,
-
-    /// Disable write commands
-    #[arg(short = 'r', long, default_value_t = false)]
-    read_only: bool,
-}
-
-#[cfg(not(debug_assertions))]
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about = "Quick 6101A2 TUI monitor")]
 struct Args {
     /// Serial port path (e.g. /dev/ttyUSB0)
     #[arg(short, long)]
-    port: String,
+    port: Option<String>,
 
     /// Serial baud rate
-    #[arg(short, long, default_value_t = 19_200)]
-    baud: u32,
+    #[arg(short, long)]
+    baud: Option<u32>,
 
     /// Modbus device address
-    #[arg(short, long, default_value_t = 2)]
-    address: u8,
+    #[arg(short, long)]
+    address: Option<u8>,
 
     /// Poll interval in milliseconds
     #[arg(short = 'i', long, default_value_t = 500)]
     poll_interval: u64,
+
+    /// Device interface
+    #[arg(short = 'I', long, value_enum, default_value_t = InterfaceMode::Remote)]
+    interface: InterfaceMode,
 
     /// Disable write commands
     #[arg(short = 'r', long, default_value_t = false)]
     read_only: bool,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeArgs {
+    transport: TransportConfig,
+    read_only: bool,
+    simulate_ui: bool,
+}
+
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
     let args = Args::parse();
+    let runtime = resolve_runtime_args(&args)?;
 
     enable_raw_mode().wrap_err("enable raw mode")?;
     let mut stdout = io::stdout();
@@ -95,19 +80,10 @@ fn main() -> eyre::Result<()> {
     let (command_tx, command_rx) = mpsc::channel();
     let (event_tx, event_rx) = mpsc::channel();
 
-    let config = TransportConfig {
-        port: port_value(&args),
-        baud: args.baud,
-        address: args.address,
-        poll_interval: Duration::from_millis(args.poll_interval),
-        read_only: args.read_only,
-        simulate: simulate_enabled(&args),
-    };
-
-    let serial_handle = spawn_worker(config, command_rx, event_tx);
+    let serial_handle = spawn_worker(runtime.transport.clone(), command_rx, event_tx);
 
     let tick_rate = Duration::from_millis(100);
-    let mut app = AppState::new(simulate_enabled(&args), args.read_only);
+    let mut app = AppState::new(runtime.simulate_ui, runtime.read_only);
     let mut exit_error: Option<eyre::Report> = None;
 
     loop {
@@ -153,22 +129,123 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
+fn resolve_runtime_args(args: &Args) -> eyre::Result<RuntimeArgs> {
+    let interface = {
+        #[cfg(debug_assertions)]
+        {
+            resolve_interface_mode(args)
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            resolve_interface_mode(args)?
+        }
+    };
+    let baud = args.baud.unwrap_or(interface.default_baud());
+    let address = args.address.unwrap_or(interface.default_address());
+
+    let port = match interface {
+        InterfaceMode::Simulation => None,
+        _ => Some(
+            args.port
+                .clone()
+                .ok_or_else(|| eyre::eyre!("serial port required unless using simulation interface"))?,
+        ),
+    };
+
+    Ok(RuntimeArgs {
+        transport: TransportConfig {
+            port,
+            baud,
+            address,
+            poll_interval: Duration::from_millis(args.poll_interval),
+            read_only: args.read_only,
+            interface,
+        },
+        read_only: args.read_only,
+        simulate_ui: interface == InterfaceMode::Simulation,
+    })
+}
+
 #[cfg(debug_assertions)]
-fn port_value(args: &Args) -> Option<String> {
-    args.port.clone()
+fn resolve_interface_mode(args: &Args) -> InterfaceMode {
+    args.interface
 }
 
 #[cfg(not(debug_assertions))]
-fn port_value(args: &Args) -> Option<String> {
-    Some(args.port.clone())
+fn resolve_interface_mode(args: &Args) -> eyre::Result<InterfaceMode> {
+    if args.interface == InterfaceMode::Simulation {
+        return Err(eyre::eyre!(
+            "simulation interface is only available in debug builds"
+        ));
+    }
+    Ok(args.interface)
 }
 
-#[cfg(debug_assertions)]
-fn simulate_enabled(args: &Args) -> bool {
-    args.simulate
-}
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
 
-#[cfg(not(debug_assertions))]
-fn simulate_enabled(_args: &Args) -> bool {
-    false
+    use super::{Args, InterfaceMode, resolve_runtime_args};
+
+    #[test]
+    fn remote_defaults_match_existing_behavior() {
+        let args = Args::try_parse_from(["bin", "--port", "/dev/ttyUSB0"])
+            .expect("args should parse");
+        let runtime = resolve_runtime_args(&args).expect("runtime should resolve");
+        assert_eq!(runtime.transport.interface, InterfaceMode::Remote);
+        assert_eq!(runtime.transport.baud, 19_200);
+        assert_eq!(runtime.transport.address, 2);
+    }
+
+    #[test]
+    fn exttool_defaults_are_selected_from_interface() {
+        let args = Args::try_parse_from([
+            "bin",
+            "--port",
+            "/dev/ttyUSB0",
+            "--interface",
+            "exttool",
+        ])
+        .expect("args should parse");
+        let runtime = resolve_runtime_args(&args).expect("runtime should resolve");
+        assert_eq!(runtime.transport.interface, InterfaceMode::Exttool);
+        assert_eq!(runtime.transport.baud, 38_400);
+        assert_eq!(runtime.transport.address, 1);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn simulation_interface_works_without_port() {
+        let args =
+            Args::try_parse_from(["bin", "--interface", "simulation"]).expect("args should parse");
+        let runtime = resolve_runtime_args(&args).expect("runtime should resolve");
+        assert_eq!(runtime.transport.interface, InterfaceMode::Simulation);
+        assert!(runtime.transport.port.is_none());
+    }
+
+    #[test]
+    fn explicit_baud_and_address_override_interface_defaults() {
+        let args = Args::try_parse_from([
+            "bin",
+            "--port",
+            "/dev/ttyUSB0",
+            "--interface",
+            "exttool",
+            "--baud",
+            "57600",
+            "--address",
+            "7",
+        ])
+        .expect("args should parse");
+        let runtime = resolve_runtime_args(&args).expect("runtime should resolve");
+        assert_eq!(runtime.transport.baud, 57_600);
+        assert_eq!(runtime.transport.address, 7);
+    }
+
+    #[test]
+    fn serial_interfaces_require_port() {
+        let args = Args::try_parse_from(["bin"]).expect("args should parse");
+        let err = resolve_runtime_args(&args).expect_err("port should be required");
+        assert!(err.to_string().contains("serial port required"));
+    }
 }

@@ -21,11 +21,8 @@ Common flags:
 - `--baud`, `-b`: baud rate (default 19200)
 - `--address`, `-a`: Modbus address (default 2)
 - `--poll-interval`, `-i`: polling interval in ms (default 500)
+- `--interface`, `-I`: transport interface (`remote`, `exttool`, `simulation`)
 - `--read-only`, `-r`: does not allow change the state of the device
-
-Debug-only:
-
-- `--simulate`, `-s`: run without a serial device
 
 ## Keys
 

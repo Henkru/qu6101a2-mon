@@ -1,46 +1,12 @@
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
-
-use color_eyre::eyre;
-
 use crate::constants::{
     REG_C_FILTER_LIMIT, REG_M_FILTER_LIMIT, REG_P_FILTER_LIMIT, REG_REAL_FLOW, REG_SPEED_RPM,
     REG_STATE, REG_TARGET_FLOW, STATE_OFF, STATE_ON, STATUS_POLL_REG_COUNT, TARGET_FLOW_MAX,
     TARGET_FLOW_MIN,
 };
 use crate::data::DeviceStatus;
-use crate::transport::{TransportCommand, TransportConfig, TransportEvent};
-
-#[allow(clippy::needless_pass_by_value)]
-pub fn run_sim_loop(
-    config: TransportConfig,
-    command_rx: Receiver<TransportCommand>,
-    event_tx: &Sender<TransportEvent>,
-) -> eyre::Result<()> {
-    let mut sim = SimState::new();
-
-    loop {
-        match command_rx.recv_timeout(config.poll_interval) {
-            Ok(TransportCommand::WriteRegister { register, value }) => {
-                if !config.read_only {
-                    sim.apply_command(register, value);
-                }
-            }
-            Ok(TransportCommand::Terminate) => break,
-            Err(RecvTimeoutError::Timeout) => {
-                let status = sim.tick();
-                event_tx.send(TransportEvent::Status(status)).ok();
-            }
-            Err(RecvTimeoutError::Disconnected) => {
-                return Err(eyre::eyre!("command channel closed"));
-            }
-        }
-    }
-
-    Ok(())
-}
 
 #[derive(Debug, Clone)]
-struct SimState {
+pub struct SimState {
     state: u16,
     target_flow: u16,
     real_flow: f64,
@@ -51,7 +17,7 @@ struct SimState {
 }
 
 impl SimState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             state: STATE_OFF,
             target_flow: 0,
@@ -63,17 +29,15 @@ impl SimState {
         }
     }
 
-    fn apply_command(&mut self, register: u16, value: u16) {
-        match register {
-            REG_STATE => self.state = value,
-            REG_TARGET_FLOW => {
-                self.target_flow = value.clamp(TARGET_FLOW_MIN, TARGET_FLOW_MAX);
-            }
-            _ => {}
-        }
+    pub fn set_power(&mut self, on: bool) {
+        self.state = if on { STATE_ON } else { STATE_OFF };
     }
 
-    fn tick(&mut self) -> DeviceStatus {
+    pub fn set_target_flow(&mut self, value: u16) {
+        self.target_flow = value.clamp(TARGET_FLOW_MIN, TARGET_FLOW_MAX);
+    }
+
+    pub fn tick(&mut self) -> DeviceStatus {
         let mut registers = vec![0u16; STATUS_POLL_REG_COUNT as usize];
         if self.state == STATE_ON {
             let target = f64::from(self.target_flow);
