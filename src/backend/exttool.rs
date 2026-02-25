@@ -1,6 +1,5 @@
-use std::io;
 use std::io::Write;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use color_eyre::eyre;
 use serialport::SerialPort;
@@ -8,7 +7,7 @@ use serialport::SerialPort;
 use crate::backend::Backend;
 use crate::constants::{STATE_OFF, STATE_ON, TARGET_FLOW_MAX, TARGET_FLOW_MIN};
 use crate::data::DeviceStatus;
-use crate::rtu::{append_crc, validate_crc};
+use crate::rtu::{append_crc, read_exact_with_timeout, validate_crc};
 use crate::transport::TransportCommand;
 
 const CMD_READ_STATUS: u8 = 0x67;
@@ -74,7 +73,7 @@ impl ExtToolBackend {
     }
 
     fn read_response_header(&mut self, expected_cmd: u8) -> eyre::Result<Vec<u8>> {
-        let header = read_exact(&mut *self.port, 3, self.io_timeout)?;
+        let header = read_exact_with_timeout(&mut *self.port, 3, self.io_timeout)?;
         let address = header[0];
         let command = header[1];
 
@@ -86,7 +85,7 @@ impl ExtToolBackend {
         }
 
         if command == (expected_cmd | 0x80) {
-            let tail = read_exact(&mut *self.port, 2, self.io_timeout)?;
+            let tail = read_exact_with_timeout(&mut *self.port, 2, self.io_timeout)?;
             let mut frame = header;
             frame.extend_from_slice(&tail);
             validate_crc(&frame)?;
@@ -104,12 +103,12 @@ impl ExtToolBackend {
 
         if command == CMD_READ_STATUS {
             let count = usize::from(header[2]);
-            let tail = read_exact(&mut *self.port, count + 2, self.io_timeout)?;
+            let tail = read_exact_with_timeout(&mut *self.port, count + 2, self.io_timeout)?;
             let mut frame = header;
             frame.extend_from_slice(&tail);
             Ok(frame)
         } else {
-            let tail = read_exact(&mut *self.port, 3, self.io_timeout)?;
+            let tail = read_exact_with_timeout(&mut *self.port, 3, self.io_timeout)?;
             let mut frame = header;
             frame.extend_from_slice(&tail);
             Ok(frame)
@@ -259,30 +258,6 @@ fn validate_write_range(start: u8, count: u8) -> eyre::Result<()> {
         return Err(eyre::eyre!("write payload must be even-length"));
     }
     validate_range(start, count)
-}
-
-fn read_exact(port: &mut dyn SerialPort, size: usize, timeout: Duration) -> eyre::Result<Vec<u8>> {
-    let mut buffer = vec![0u8; size];
-    let mut read_total = 0usize;
-    let deadline = Instant::now() + timeout;
-
-    while read_total < size {
-        if Instant::now() > deadline {
-            return Err(eyre::eyre!(
-                "serial read timeout while waiting for {} bytes (got {})",
-                size,
-                read_total
-            ));
-        }
-        match port.read(&mut buffer[read_total..]) {
-            Ok(0) => {}
-            Ok(read_now) => read_total += read_now,
-            Err(err) if err.kind() == io::ErrorKind::TimedOut => {}
-            Err(err) => return Err(eyre::eyre!("serial read failed: {err}")),
-        }
-    }
-
-    Ok(buffer)
 }
 
 #[cfg(test)]

@@ -1,3 +1,7 @@
+use std::io;
+use std::io::Read;
+use std::time::{Duration, Instant};
+
 use color_eyre::eyre;
 
 pub fn crc16_modbus(data: &[u8]) -> u16 {
@@ -39,9 +43,42 @@ pub fn validate_crc(frame: &[u8]) -> eyre::Result<()> {
     Ok(())
 }
 
+pub fn read_exact_with_timeout(
+    reader: &mut dyn Read,
+    size: usize,
+    timeout: Duration,
+) -> eyre::Result<Vec<u8>> {
+    let mut buffer = vec![0u8; size];
+    let mut read_total = 0usize;
+    let deadline = Instant::now() + timeout;
+
+    while read_total < size {
+        if Instant::now() > deadline {
+            return Err(eyre::eyre!(
+                "read timeout while waiting for {} bytes (got {})",
+                size,
+                read_total
+            ));
+        }
+
+        match reader.read(&mut buffer[read_total..]) {
+            Ok(0) => {}
+            Ok(read_now) => read_total += read_now,
+            Err(err) if err.kind() == io::ErrorKind::TimedOut => {}
+            Err(err) => return Err(eyre::eyre!("read failed: {err}")),
+        }
+    }
+
+    Ok(buffer)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{append_crc, crc16_modbus, validate_crc};
+    use std::io;
+    use std::io::Read;
+    use std::time::Duration;
+
+    use super::{append_crc, crc16_modbus, read_exact_with_timeout, validate_crc};
 
     #[test]
     fn crc_matches_known_vector() {
@@ -61,5 +98,28 @@ mod tests {
         frame[3] ^= 0xFF;
         let err = validate_crc(&frame).expect_err("crc should fail");
         assert!(err.to_string().contains("invalid frame crc"));
+    }
+
+    #[test]
+    fn read_exact_with_timeout_reads_requested_bytes() {
+        let mut reader = io::Cursor::new(vec![1, 2, 3, 4]);
+        let out = read_exact_with_timeout(&mut reader, 4, Duration::from_millis(50))
+            .expect("read should succeed");
+        assert_eq!(out, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn read_exact_with_timeout_fails_when_source_stalls() {
+        struct EmptyReader;
+        impl Read for EmptyReader {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        let mut reader = EmptyReader;
+        let err = read_exact_with_timeout(&mut reader, 1, Duration::from_millis(1))
+            .expect_err("read should time out");
+        assert!(err.to_string().contains("timeout"));
     }
 }
