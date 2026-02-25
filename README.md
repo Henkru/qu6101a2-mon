@@ -18,11 +18,15 @@ cargo run -- --port /dev/ttyUSB0
 Common flags:
 
 - `--port`, `-p`: serial device path
-- `--baud`, `-b`: baud rate (default 19200)
-- `--address`, `-a`: Modbus address (default 2)
+- `--baud`, `-b`: baud rate (defaults by interface: `remote=19200`, `exttool=38400`)
+- `--address`, `-a`: device address (defaults by interface: `remote=2`, `exttool=1`)
 - `--poll-interval`, `-i`: polling interval in ms (default 500)
 - `--interface`, `-I`: transport interface (`remote`, `exttool`, `simulation`)
 - `--read-only`, `-r`: does not allow change the state of the device
+
+Notes:
+
+- `simulation` interface is available only in debug builds.
 
 ## Keys
 

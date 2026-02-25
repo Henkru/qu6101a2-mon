@@ -4,6 +4,7 @@ use crate::data::DeviceStatus;
 use crate::interface::InterfaceMode;
 use crate::transport::{TransportCommand, TransportConfig};
 
+mod exttool;
 mod remote;
 
 #[cfg(debug_assertions)]
@@ -24,7 +25,14 @@ pub(crate) fn build_backend(config: &TransportConfig) -> eyre::Result<Box<dyn Ba
             let backend = remote::RemoteBackend::new(port, config.baud, config.address)?;
             Ok(Box::new(backend))
         }
-        InterfaceMode::Exttool => Err(eyre::eyre!("exttool interface not implemented yet")),
+        InterfaceMode::Exttool => {
+            let port = config
+                .port
+                .as_ref()
+                .ok_or_else(|| eyre::eyre!("serial port required"))?;
+            let backend = exttool::ExtToolBackend::new(port, config.baud, config.address)?;
+            Ok(Box::new(backend))
+        }
         InterfaceMode::Simulation => {
             #[cfg(debug_assertions)]
             {

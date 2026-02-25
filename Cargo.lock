@@ -1098,6 +1098,7 @@ dependencies = [
  "crossterm",
  "modbus-rtu",
  "ratatui",
+ "serialport",
 ]
 
 [[package]]

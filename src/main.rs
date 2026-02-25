@@ -4,6 +4,7 @@ mod constants;
 mod data;
 mod interface;
 mod input;
+mod rtu;
 mod transport;
 mod ui;
 
