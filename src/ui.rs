@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Axis, Block, Borders, Chart, Clear, Dataset, Gauge, GraphType, Paragraph, Wrap,
 };
-use ratatui::{symbols, Frame};
+use ratatui::{Frame, symbols};
 
 use crate::app::AppState;
 use crate::constants::{STATE_OFF, STATE_ON, TARGET_FLOW_MAX};
@@ -211,12 +211,14 @@ fn render_speed_chart(frame: &mut Frame, area: Rect, app: &AppState) {
         .fold(0.0, f64::max)
         .max(100.0);
 
-    let datasets = vec![Dataset::default()
-        .name("RPM")
-        .marker(symbols::Marker::Braille)
-        .style(Style::default().fg(Color::LightGreen))
-        .graph_type(GraphType::Line)
-        .data(&data)];
+    let datasets = vec![
+        Dataset::default()
+            .name("RPM")
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::LightGreen))
+            .graph_type(GraphType::Line)
+            .data(&data),
+    ];
 
     let chart = Chart::new(datasets)
         .block(
@@ -253,24 +255,39 @@ fn render_filters(frame: &mut Frame, area: Rect, app: &AppState) {
         frame,
         chunks[0],
         "P-Filter",
+        app.status.as_ref().map(|s| s.p_filter_total),
         app.status.as_ref().map(|s| s.p_filter_limit),
     );
     render_filter_gauge(
         frame,
         chunks[1],
         "M-Filter",
+        app.status.as_ref().map(|s| s.m_filter_total),
         app.status.as_ref().map(|s| s.m_filter_limit),
     );
     render_filter_gauge(
         frame,
         chunks[2],
         "C-Filter",
+        app.status.as_ref().map(|s| s.c_filter_total),
         app.status.as_ref().map(|s| s.c_filter_limit),
     );
 }
 
-fn render_filter_gauge(frame: &mut Frame, area: Rect, label: &str, limit: Option<u16>) {
+fn render_filter_gauge(
+    frame: &mut Frame,
+    area: Rect,
+    label: &str,
+    total: Option<u16>,
+    limit: Option<u16>,
+) {
+    let total = f64::from(total.unwrap_or(0));
     let value = f64::from(limit.unwrap_or(0));
+    let ratio = if value > 0.0 {
+        (total / value).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let gauge = Gauge::default()
         .block(
             Block::default()
@@ -279,8 +296,8 @@ fn render_filter_gauge(frame: &mut Frame, area: Rect, label: &str, limit: Option
                 .border_style(Style::default().fg(Color::LightGreen)),
         )
         .gauge_style(Style::default().fg(Color::LightGreen))
-        .ratio(0.0)
-        .label(format!("max {value} km3"));
+        .ratio(ratio)
+        .label(format!("{total:.0}/{value:.0} km3"));
     frame.render_widget(gauge, area);
 }
 

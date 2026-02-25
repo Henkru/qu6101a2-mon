@@ -5,7 +5,12 @@ use color_eyre::eyre;
 use serialport::SerialPort;
 
 use crate::backend::Backend;
-use crate::constants::{STATE_OFF, STATE_ON, TARGET_FLOW_MAX, TARGET_FLOW_MIN};
+use crate::constants::{
+    REG_C_FILTER_LIMIT, REG_C_FILTER_TOTAL, REG_M_FILTER_LIMIT, REG_M_FILTER_TOTAL,
+    REG_P_FILTER_LIMIT, REG_P_FILTER_TOTAL, REG_REAL_FLOW, REG_SPEED_RPM, REG_STATE,
+    REG_STATUS_FLAGS, REG_TARGET_FLOW, REG_TUBE_DIAMETER, STATE_OFF, STATE_ON,
+    STATUS_POLL_REG_COUNT, TARGET_FLOW_MAX, TARGET_FLOW_MIN,
+};
 use crate::data::DeviceStatus;
 use crate::rtu::{append_crc, read_exact_with_timeout, validate_crc};
 use crate::transport::TransportCommand;
@@ -20,12 +25,17 @@ const STATUS_START: u8 = 0x10;
 const STATUS_BYTE_COUNT: u8 = 0x38;
 
 const IDX_REAL_FLOW: u8 = 0x19;
+const IDX_P_FILTER_TOTAL: u8 = 0x1A;
+const IDX_M_FILTER_TOTAL: u8 = 0x1B;
+const IDX_C_FILTER_TOTAL: u8 = 0x1C;
 const IDX_SPEED_RPM: u8 = 0x1D;
 const IDX_STATE: u8 = 0x1E;
+const IDX_TUBE_DIAMETER: u8 = 0x1F;
 const IDX_TARGET_FLOW: u8 = 0x28;
 const IDX_P_FILTER_LIMIT: u8 = 0x29;
 const IDX_M_FILTER_LIMIT: u8 = 0x2A;
 const IDX_C_FILTER_LIMIT: u8 = 0x2B;
+const IDX_STATUS_FLAGS: u8 = 0x10;
 
 pub(crate) struct ExtToolBackend {
     port: Box<dyn SerialPort>,
@@ -225,15 +235,43 @@ fn map_status_payload(start: u8, payload: &[u8]) -> eyre::Result<DeviceStatus> {
         values.get(offset).copied().unwrap_or(0)
     };
 
+    let state = read_idx(IDX_STATE);
+    let target_flow = read_idx(IDX_TARGET_FLOW);
+    let real_flow = read_idx(IDX_REAL_FLOW);
+    let speed_rpm = read_idx(IDX_SPEED_RPM);
+    let p_filter_total = read_idx(IDX_P_FILTER_TOTAL);
+    let m_filter_total = read_idx(IDX_M_FILTER_TOTAL);
+    let c_filter_total = read_idx(IDX_C_FILTER_TOTAL);
+    let p_filter_limit = read_idx(IDX_P_FILTER_LIMIT);
+    let m_filter_limit = read_idx(IDX_M_FILTER_LIMIT);
+    let c_filter_limit = read_idx(IDX_C_FILTER_LIMIT);
+
+    let mut registers = vec![0u16; STATUS_POLL_REG_COUNT as usize];
+    registers[REG_STATE as usize] = state;
+    registers[REG_TARGET_FLOW as usize] = target_flow;
+    registers[REG_STATUS_FLAGS as usize] = read_idx(IDX_STATUS_FLAGS);
+    registers[REG_P_FILTER_TOTAL as usize] = p_filter_total;
+    registers[REG_M_FILTER_TOTAL as usize] = m_filter_total;
+    registers[REG_C_FILTER_TOTAL as usize] = c_filter_total;
+    registers[REG_P_FILTER_LIMIT as usize] = p_filter_limit;
+    registers[REG_M_FILTER_LIMIT as usize] = m_filter_limit;
+    registers[REG_C_FILTER_LIMIT as usize] = c_filter_limit;
+    registers[REG_SPEED_RPM as usize] = speed_rpm;
+    registers[REG_TUBE_DIAMETER as usize] = read_idx(IDX_TUBE_DIAMETER);
+    registers[REG_REAL_FLOW as usize] = real_flow;
+
     Ok(DeviceStatus {
-        state: read_idx(IDX_STATE),
-        target_flow: read_idx(IDX_TARGET_FLOW),
-        real_flow: read_idx(IDX_REAL_FLOW),
-        speed_rpm: read_idx(IDX_SPEED_RPM),
-        p_filter_limit: read_idx(IDX_P_FILTER_LIMIT),
-        m_filter_limit: read_idx(IDX_M_FILTER_LIMIT),
-        c_filter_limit: read_idx(IDX_C_FILTER_LIMIT),
-        registers: values,
+        state,
+        target_flow,
+        real_flow,
+        speed_rpm,
+        p_filter_total,
+        m_filter_total,
+        c_filter_total,
+        p_filter_limit,
+        m_filter_limit,
+        c_filter_limit,
+        registers,
     })
 }
 
@@ -265,8 +303,14 @@ mod tests {
     use super::{
         build_read_request, build_write_request, map_status_payload, parse_read_response,
         parse_write_response, CMD_READ_STATUS, CMD_WRITE_COMMAND, IDX_C_FILTER_LIMIT,
-        IDX_M_FILTER_LIMIT, IDX_P_FILTER_LIMIT, IDX_REAL_FLOW, IDX_SPEED_RPM, IDX_STATE,
-        IDX_TARGET_FLOW, STATUS_BYTE_COUNT, STATUS_START,
+        IDX_C_FILTER_TOTAL, IDX_M_FILTER_LIMIT, IDX_M_FILTER_TOTAL, IDX_P_FILTER_LIMIT,
+        IDX_P_FILTER_TOTAL, IDX_REAL_FLOW, IDX_SPEED_RPM, IDX_STATE, IDX_TARGET_FLOW,
+        STATUS_BYTE_COUNT, STATUS_START,
+    };
+    use crate::constants::{
+        REG_C_FILTER_LIMIT, REG_C_FILTER_TOTAL, REG_M_FILTER_LIMIT, REG_M_FILTER_TOTAL,
+        REG_P_FILTER_LIMIT, REG_P_FILTER_TOTAL, REG_REAL_FLOW, REG_SPEED_RPM, REG_STATE,
+        REG_STATUS_FLAGS, REG_TARGET_FLOW, REG_TUBE_DIAMETER, STATUS_POLL_REG_COUNT,
     };
     use crate::rtu::append_crc;
 
@@ -292,6 +336,9 @@ mod tests {
     fn parses_read_response_and_maps_fields() {
         let mut payload = vec![0u8; usize::from(STATUS_BYTE_COUNT)];
         set_u16(&mut payload, IDX_REAL_FLOW, 64);
+        set_u16(&mut payload, IDX_P_FILTER_TOTAL, 15);
+        set_u16(&mut payload, IDX_M_FILTER_TOTAL, 25);
+        set_u16(&mut payload, IDX_C_FILTER_TOTAL, 35);
         set_u16(&mut payload, IDX_SPEED_RPM, 2500);
         set_u16(&mut payload, IDX_STATE, 1);
         set_u16(&mut payload, IDX_TARGET_FLOW, 70);
@@ -309,9 +356,26 @@ mod tests {
         assert_eq!(status.speed_rpm, 2500);
         assert_eq!(status.state, 1);
         assert_eq!(status.target_flow, 70);
+        assert_eq!(status.p_filter_total, 15);
+        assert_eq!(status.m_filter_total, 25);
+        assert_eq!(status.c_filter_total, 35);
         assert_eq!(status.p_filter_limit, 200);
         assert_eq!(status.m_filter_limit, 1200);
         assert_eq!(status.c_filter_limit, 2400);
+
+        assert_eq!(status.registers.len(), STATUS_POLL_REG_COUNT as usize);
+        assert_eq!(status.registers[REG_STATUS_FLAGS as usize], 0);
+        assert_eq!(status.registers[REG_STATE as usize], 1);
+        assert_eq!(status.registers[REG_TARGET_FLOW as usize], 70);
+        assert_eq!(status.registers[REG_REAL_FLOW as usize], 64);
+        assert_eq!(status.registers[REG_SPEED_RPM as usize], 2500);
+        assert_eq!(status.registers[REG_P_FILTER_TOTAL as usize], 15);
+        assert_eq!(status.registers[REG_M_FILTER_TOTAL as usize], 25);
+        assert_eq!(status.registers[REG_C_FILTER_TOTAL as usize], 35);
+        assert_eq!(status.registers[REG_P_FILTER_LIMIT as usize], 200);
+        assert_eq!(status.registers[REG_M_FILTER_LIMIT as usize], 1200);
+        assert_eq!(status.registers[REG_C_FILTER_LIMIT as usize], 2400);
+        assert_eq!(status.registers[REG_TUBE_DIAMETER as usize], 0);
     }
 
     #[test]

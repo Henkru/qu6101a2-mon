@@ -1,7 +1,7 @@
 use crate::constants::{
-    REG_C_FILTER_LIMIT, REG_M_FILTER_LIMIT, REG_P_FILTER_LIMIT, REG_REAL_FLOW, REG_SPEED_RPM,
-    REG_STATE, REG_TARGET_FLOW, STATE_OFF, STATE_ON, STATUS_POLL_REG_COUNT, TARGET_FLOW_MAX,
-    TARGET_FLOW_MIN,
+    REG_C_FILTER_LIMIT, REG_C_FILTER_TOTAL, REG_M_FILTER_LIMIT, REG_M_FILTER_TOTAL,
+    REG_P_FILTER_LIMIT, REG_P_FILTER_TOTAL, REG_REAL_FLOW, REG_SPEED_RPM, REG_STATE,
+    REG_TARGET_FLOW, STATE_OFF, STATE_ON, STATUS_POLL_REG_COUNT, TARGET_FLOW_MAX, TARGET_FLOW_MIN,
 };
 use crate::data::DeviceStatus;
 
@@ -11,6 +11,9 @@ pub struct SimState {
     target_flow: u16,
     real_flow: f64,
     speed_rpm: f64,
+    p_filter_total: u16,
+    m_filter_total: u16,
+    c_filter_total: u16,
     p_filter_limit: u16,
     m_filter_limit: u16,
     c_filter_limit: u16,
@@ -23,6 +26,9 @@ impl SimState {
             target_flow: 0,
             real_flow: 0.0,
             speed_rpm: 0.0,
+            p_filter_total: 50,
+            m_filter_total: 300,
+            c_filter_total: 600,
             p_filter_limit: 200,
             m_filter_limit: 1200,
             c_filter_limit: 2400,
@@ -58,6 +64,9 @@ impl SimState {
         registers[REG_TARGET_FLOW as usize] = self.target_flow;
         registers[REG_REAL_FLOW as usize] = clamp_u16(self.real_flow);
         registers[REG_SPEED_RPM as usize] = clamp_u16(self.speed_rpm);
+        registers[REG_P_FILTER_TOTAL as usize] = self.p_filter_total;
+        registers[REG_M_FILTER_TOTAL as usize] = self.m_filter_total;
+        registers[REG_C_FILTER_TOTAL as usize] = self.c_filter_total;
         registers[REG_P_FILTER_LIMIT as usize] = self.p_filter_limit;
         registers[REG_M_FILTER_LIMIT as usize] = self.m_filter_limit;
         registers[REG_C_FILTER_LIMIT as usize] = self.c_filter_limit;
@@ -67,6 +76,9 @@ impl SimState {
             target_flow: self.target_flow,
             real_flow: clamp_u16(self.real_flow),
             speed_rpm: clamp_u16(self.speed_rpm),
+            p_filter_total: self.p_filter_total,
+            m_filter_total: self.m_filter_total,
+            c_filter_total: self.c_filter_total,
             p_filter_limit: self.p_filter_limit,
             m_filter_limit: self.m_filter_limit,
             c_filter_limit: self.c_filter_limit,
